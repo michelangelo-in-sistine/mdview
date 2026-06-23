@@ -1403,31 +1403,12 @@ static void build_js(StrBuf* sb) {
     "for(var i=0;i<pres.length;i++){var el=pres[i],cls=el.className||'';"
     "var lang=cls.replace('language-','');"
     "if(!lang)continue;"
-    "var h=el.innerHTML;"
-
-    /* Comments */
-    "if(lang==='html'||lang==='xml'){"
-    "h=h.replace(/(&lt;!--[\\s\\S]*?--&gt;)/g,'<span class=\"sh-cm\">$1</span>');"
-    "}else{"
-    "h=h.replace(/((?:^|\\n)\\s*#[^\\n]*)/g,'<span class=\"sh-cm\">$1</span>');"  /* # comments for python/bash/ruby */
-    "h=h.replace(/(\\/{2}[^\\n]*)/g,'<span class=\"sh-cm\">$1</span>');"          /* // comments */
-    "h=h.replace(/(--[^\\n]*)/g,'<span class=\"sh-cm\">$1</span>');"              /* -- sql comments */
-    "h=h.replace(/(\\/\\*[\\s\\S]*?\\*\\/)/g,'<span class=\"sh-cm\">$1</span>');" /* block comments */
-    "}"
-
-    /* Strings */
-    "h=h.replace(/(&quot;(?:[^&]|&(?!quot;))*?&quot;)/g,'<span class=\"sh-str\">$1</span>');"
-    "h=h.replace(/('(?:[^'\\\\]|\\\\.)*?')/g,'<span class=\"sh-str\">$1</span>');"
-    "h=h.replace(/(`(?:[^`\\\\]|\\\\.)*?`)/g,'<span class=\"sh-str\">$1</span>');"
-
-    /* Numbers */
-    "h=h.replace(/\\b(\\d+\\.?\\d*(?:e[+-]?\\d+)?|0x[0-9a-fA-F]+)\\b/g,'<span class=\"sh-num\">$1</span>');"
-
-    /* HTML/XML tags */
-    "if(lang==='html'||lang==='xml'){"
-    "h=h.replace(/(&lt;\\/?)([a-zA-Z][a-zA-Z0-9]*)/g,'$1<span class=\"sh-tag\">$2</span>');"
-    "h=h.replace(/\\s([a-zA-Z-]+)(=)/g,' <span class=\"sh-attr\">$1</span>$2');"
-    "}else{"
+    "var txt=(el.textContent!==undefined)?el.textContent:el.innerText;"
+    "var ranges=[];"
+    "function ov(a,b){for(var r=0;r<ranges.length;r++){if(a<ranges[r].e&&b>ranges[r].s)return 1}return 0}"
+    "function mark(re,cn,g){var m;re.lastIndex=0;while((m=re.exec(txt))){var v=g?m[g]:m[0];"
+    "if(v){var p=m.index+(g?m[0].indexOf(v):0),e=p+v.length;if(!ov(p,e))ranges.push({s:p,e:e,c:cn})}"
+    "if(m[0].length===0)re.lastIndex++}}"
 
     /* Keywords per language family */
     "var kws='';"
@@ -1445,13 +1426,29 @@ static void build_js(StrBuf* sb) {
     "kws='\\\\b(color|background|margin|padding|border|font|display|position|width|height|top|left|right|bottom|flex|grid|none|block|inline|relative|absolute|fixed|inherit|auto|important|solid|transparent)\\\\b';"
     "else if(lang==='php')"
     "kws='\\\\b(function|return|if|else|elseif|for|foreach|while|do|switch|case|break|continue|class|public|private|protected|static|new|echo|print|null|true|false|array|isset|empty|unset|require|include|use|namespace|try|catch|finally|throw|var)\\\\b';"
-    "if(kws){var re=new RegExp(kws,'g');h=h.replace(re,'<span class=\"sh-kw\">$1</span>');}"
 
-    /* Function calls: word followed by ( */
-    "h=h.replace(/\\b([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\(/g,'<span class=\"sh-fn\">$1</span>(');"
+    "if(lang==='html'||lang==='xml'){"
+    "mark(/<!--[\\s\\S]*?-->/g,'sh-cm',0);"
+    "mark(/<\\/?([a-zA-Z][a-zA-Z0-9]*)/g,'sh-tag',1);"
+    "mark(/\\s([a-zA-Z-]+)(=)/g,'sh-attr',1);"
+    "}else{"
+    "mark(/\\/\\*[\\s\\S]*?\\*\\//g,'sh-cm',0);"
+    "mark(/\\/{2}[^\\n]*/g,'sh-cm',0);"
+    "mark(/--[^\\n]*/g,'sh-cm',0);"
+    "if(lang==='python'||lang==='py'||lang==='bash'||lang==='sh'||lang==='shell'||lang==='zsh'||lang==='ruby'||lang==='rb')"
+    "mark(/(?:^|\\n)\\s*#[^\\n]*/g,'sh-cm',0);"
     "}"
-
-    "el.innerHTML=h;}}"
+    "mark(/\"(?:[^\"\\\\]|\\\\.)*\"/g,'sh-str',0);"
+    "mark(/'(?:[^'\\\\]|\\\\.)*'/g,'sh-str',0);"
+    "mark(/`(?:[^`\\\\]|\\\\.)*`/g,'sh-str',0);"
+    "mark(/\\b(\\d+\\.?\\d*(?:e[+-]?\\d+)?|0x[0-9a-fA-F]+)\\b/g,'sh-num',1);"
+    "if(kws)mark(new RegExp(kws,'g'),'sh-kw',1);"
+    "if(!(lang==='html'||lang==='xml'))mark(/\\b([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\(/g,'sh-fn',1);"
+    "ranges.sort(function(a,b){return a.s-b.s});"
+    "el.innerHTML='';var pos=0;"
+    "for(var q=0;q<ranges.length;q++){var rg=ranges[q];if(pos<rg.s)el.appendChild(document.createTextNode(txt.substring(pos,rg.s)));"
+    "var sp=document.createElement('span');sp.className=rg.c;sp.appendChild(document.createTextNode(txt.substring(rg.s,rg.e)));el.appendChild(sp);pos=rg.e}"
+    "if(pos<txt.length)el.appendChild(document.createTextNode(txt.substring(pos)));}}"
 
     /* Expand/collapse for long blocks */
     "function initCollapse(){"
